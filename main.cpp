@@ -478,7 +478,7 @@ int main(int argc , char *argv[])
         // fd_set working_writefds = fds; TODO: have select for writes
   
         //wait for an activity on one of the sockets , timeout is NULL , so wait indefinitely
-        activity = select( max_sd + 1 , &working_readfds , &working_writefds , NULL , NULL);
+        activity = select( max_sd + 1 , &working_readfds , NULL , NULL , NULL);
     
         if ((activity < 0) && (errno!=EINTR)) 
         {
