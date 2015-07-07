@@ -352,17 +352,13 @@ void sendToNessieFake(int magic, int opcode, int keylength, int totalbody, int e
 
 
 int process_request(Connection* new_conn, map<int, Connection*>* socket_map) {
-    std::cout << "Connection: " << new_conn->get_sock() << std::endl;
     Request req;
     int ret_val = new_conn->fetch_request(&req);
-    std::cout << ret_val << std::endl;
     if (ret_val == 0) {
         // Full request has been retrieved.
         // Push into request data structure.
         // In current case, process request here.
-        std::cout << "Handling request: " << new_conn->get_sock() << std::endl;
         new_conn->handle_request(req);
-        std::cout << "FinishFinish  Handling request: " << new_conn->get_sock() << std::endl;
         return 0;
     } 
     if (ret_val != 1) {
@@ -479,13 +475,10 @@ int main(int argc , char *argv[])
 
         // Make a copy of the readfds because select will overwrite the fdset.        
         fd_set working_readfds = fds;
-        fd_set working_writefds = fds;
-        std::cout << &working_readfds <<std::endl;
+        // fd_set working_writefds = fds; TODO: have select for writes
   
         //wait for an activity on one of the sockets , timeout is NULL , so wait indefinitely
-        std::cout << "Selectint: MAx:  " << max_sd << std::endl;
         activity = select( max_sd + 1 , &working_readfds , &working_writefds , NULL , NULL);
-        std::cout << "Done Selectint" << std::endl;
     
         if ((activity < 0) && (errno!=EINTR)) 
         {
@@ -501,7 +494,6 @@ int main(int argc , char *argv[])
                 perror("accept");
                 exit(EXIT_FAILURE);
             }
-            std::cout << "New Conneciont : " << new_socket << std::endl;
             // Consider making the server socket also nonblocking. This is probably more
             // complicated than it needs to be, but let's assume it is correct for now.
             /*
@@ -516,14 +508,11 @@ int main(int argc , char *argv[])
             FD_SET(new_socket, &fds);
 
             Connection* new_conn = new Connection(new_socket);
-            // TODO: Create a map where the key is the socket and the value is the a pointer to
-            //       a connection object
-           
+
             socket_map[new_socket] = new_conn;
 
             int ret_val = process_request(new_conn, &socket_map);
             if (ret_val == -1) {
-                std::cout << "Clearing" << std::endl;
                 FD_CLR(new_socket, &fds);
             }
         }
