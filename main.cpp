@@ -128,7 +128,10 @@ public:
     Connection(int socket) : socket(socket), buflen(0) {}
 
     int get_sock() { return socket; }
-    int Close() { close(socket); }
+    int Close() { 
+        std::cout << "Closing socket: " << socket << std::endl;
+        close(socket); 
+    }
 
     // NOTE: Assuming that a structure always start at the beginning
     //       of the buffer. To make this more efficient, either have
@@ -144,7 +147,7 @@ public:
                 return -1;
             }
         } else if (recv_len == 0) {
-            return 1; // Cannot currently read any data from the socket
+            return -1; // Closed
         } 
         buflen += recv_len;
         if (buflen < sizeof(struct RequestHeader)) {
@@ -388,7 +391,7 @@ int main(int argc , char *argv[])
     //int offset[MAX_CONNECTIONS] = {0};
       
     //set of socket descriptors
-    fd_set fds;
+    fd_set activefds, readfds, writefds;
   
     //initialise all client_socket[] to 0 so not checked
     for (i = 0; i < max_clients; i++) 
@@ -462,10 +465,10 @@ int main(int argc , char *argv[])
     //std::thread printLoop(printStats);
      
     //clear the socket set
-    FD_ZERO(&fds);
+    FD_ZERO(&activefds);
   
     //add master socket to set
-    FD_SET(master_socket, &fds);
+    FD_SET(master_socket, &activefds);
 
     // This is currently our largest fd
     max_sd = master_socket;
@@ -474,11 +477,11 @@ int main(int argc , char *argv[])
     {
 
         // Make a copy of the readfds because select will overwrite the fdset.        
-        fd_set working_readfds = fds;
-        // fd_set working_writefds = fds; TODO: have select for writes
+        readfds = activefds;
+        // fd_set writefds = fds; TODO: have select for writes
   
         //wait for an activity on one of the sockets , timeout is NULL , so wait indefinitely
-        activity = select( max_sd + 1 , &working_readfds , NULL , NULL , NULL);
+        activity = select( max_sd + 1 , &readfds , NULL , NULL , NULL);
     
         if ((activity < 0) && (errno!=EINTR)) 
         {
@@ -487,7 +490,7 @@ int main(int argc , char *argv[])
         }
           
         //If something happened on the master socket , then its an incoming connection
-        if (FD_ISSET(master_socket, &working_readfds)) 
+        if (FD_ISSET(master_socket, &readfds)) 
         {
             if ((new_socket = accept(master_socket, (struct sockaddr *)&address, (socklen_t*)&addrlen))<0)
             {
@@ -504,29 +507,38 @@ int main(int argc , char *argv[])
                 exit(EXIT_FAILURE);
             }
             */
+            std::cout << "Creating socket: " << new_socket << std::endl;
             setNonblocking(new_socket);
-            FD_SET(new_socket, &fds);
+            FD_SET(new_socket, &activefds);
 
             Connection* new_conn = new Connection(new_socket);
 
             socket_map[new_socket] = new_conn;
 
             int ret_val = process_request(new_conn, &socket_map);
+            while(ret_val == 0) {
+                ret_val = process_request(new_conn, &socket_map);
+            }
             if (ret_val == -1) {
-                FD_CLR(new_socket, &fds);
+                FD_CLR(new_socket, &activefds);
             }
         }
-        for (i = 0; i < max_sd + 1; i++) {
-            if (!FD_ISSET(i, &working_readfds) || i == master_socket) {
+        for (auto& kv: socket_map) {
+            i = kv.first;
+            if (!FD_ISSET(i, &readfds) || i == master_socket) {
                 continue; // Skip these sockets
             }
             Connection* new_conn = socket_map[i];
             assert(new_conn != NULL);
             int ret_val = process_request(new_conn, &socket_map);
+            while(ret_val == 0) {
+                ret_val = process_request(new_conn, &socket_map);
+            }
             if (ret_val == -1) {
-                FD_CLR(i, &fds);
+                FD_CLR(i, &activefds);
             }
         }
+        
         if (new_socket > max_sd)
             max_sd = new_socket;
     }
