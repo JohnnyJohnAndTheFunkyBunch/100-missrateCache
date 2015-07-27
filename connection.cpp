@@ -143,11 +143,12 @@ int Connection::flush_writes() {
         int str_size = out_bufs_.front().size();
         int n = send(sock_, out_bufs_.front().data(), str_size, 0);
         if (n == -1) {
-            return -1;                
+            return -1;
         } else if (n < str_size) {
             out_bufs_.front().erase(0, n);
             return 1;
         }
+        out_bufs_.pop_front();
     }
     return 0;
 }    
