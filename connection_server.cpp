@@ -5,9 +5,9 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/select.h>
-#include "connection_server.h"
-#include "connection_io_server.h"
-#include "socket_util.h"
+#include <memcached-imitation/connection_server.h>
+#include <memcached-imitation/connection_io_server.h>
+#include <memcached-imitation/socket_util.h>
 
 using namespace std;
 
@@ -101,6 +101,11 @@ int ConnectionServer::start() {
                         return -1;
                     }                    
                 } else {
+                    if (SocketUtil::set_non_block(new_sock) == -1) {
+                        printf("asdf]=\n");
+                        return -1;            
+                    }
+                    SocketUtil::turn_off_nagle(new_sock);
                     add_socket_to_IO_server(new_sock);                            
                 }
             }

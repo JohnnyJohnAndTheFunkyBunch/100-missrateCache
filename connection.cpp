@@ -4,7 +4,7 @@
 #include <string.h>
 #include <sys/types.h>
 #include <sys/socket.h>
-#include "connection.h"
+#include <memcached-imitation/connection.h>
 
 namespace NessieCache {
 
@@ -22,14 +22,16 @@ int Connection::fill_buffer() {
     return 1; // Buffer full but there more to read.
 }
     
-int Connection::process_next_request() {
+int Connection::process_next_request(int* offset) {
     struct Request req;
     struct RequestHeader* header = &(req.header);
-    int fetch_rc = fetch_request(&req);
+    int amount_read;
+    int fetch_rc = fetch_request(&req, *offset, &amount_read);
     if (fetch_rc == -1) {
         return -1;
     } 
     if (fetch_rc == 0) {
+        *offset += amount_read;
         if (sendToNessieFake(header->magic, header->opcode, header->keylength, 
                 header->totalbody, header->extralength, 
                 (char*)(&(header->opaque)), req.body) == -1) {
@@ -38,7 +40,8 @@ int Connection::process_next_request() {
         }
         delete[] req.body;
         return 0;
-    } else if (fetch_rc == -1) {
+    } else if (fetch_rc == 1) {
+        *offset = 0;
         return 1;    
     }
     assert(false);
@@ -47,31 +50,42 @@ int Connection::process_next_request() {
     
 // TODO: This is fairly inefficient as it requires a memmove for every
 //       request. Should be based on offsets.    
-int Connection::fetch_request(struct Request* req) {       
+int Connection::fetch_request(struct Request* req, int offset, int* amount_read) {       
     // Check if we have received the entire header
-    if (buf_used_ < (int)sizeof(struct RequestHeader)) {
+    if (buf_used_- offset < (int)sizeof(struct RequestHeader)) {
+        if (buf_used_ - offset > 0) {
+            memmove(buf_, buf_ + offset, buf_used_ - offset);
+        }
+        buf_used_ = buf_used_ - offset;
         return 1;
     }
-    struct RequestHeader* head = reinterpret_cast<RequestHeader*>(buf_);                
+    struct RequestHeader* head = reinterpret_cast<RequestHeader*>(buf_ + offset);                
     if (head->magic != 0x80) {
         return -1; // Need to close connection.
     }
-    head->keylength = ntohs(head->keylength);
-    head->totalbody = ntohl(head->totalbody);            
+    int keylength = ntohs(head->keylength);
+    int totalbody = ntohl(head->totalbody);            
     // Check if we have retrieved the entire data
-    int request_size = head->totalbody + sizeof(struct RequestHeader);
-    if (buf_used_ >= request_size) {
-        char* body = new char[head->totalbody];
+    int request_size = totalbody + sizeof(struct RequestHeader);
+    if (buf_used_ - offset >= request_size) {
+        // TODO: Dynamic allocation overhead can be removed.
+        assert(totalbody < 100000);
+        char* body = new char[totalbody];
         // Copy the body and the header separately
-        memcpy(body, buf_ + sizeof(struct RequestHeader), head->totalbody);
-        memcpy(&(req->header), &head, sizeof(struct RequestHeader));
+        memcpy(body, buf_ + offset + sizeof(struct RequestHeader), totalbody);
+        memcpy(&(req->header), head, sizeof(struct RequestHeader));
         req->body = body;
-        buf_used_ -= request_size;
-        if (buf_used_ > 0) {
-            memmove(buf_, buf_ + request_size, buf_used_);
-        }
+        //buf_used_ -= request_size;
+        //if (buf_used_ > 0) {
+        //    memmove(buf_, buf_ + request_size, buf_used_);
+        //}
+        *amount_read = request_size;
         return 0;
     }
+    if (buf_used_ - offset > 0) {
+        memmove(buf_, buf_ + offset, buf_used_ - offset);
+    }
+    buf_used_ = buf_used_ - offset;
     return 1;
 }
     
@@ -164,9 +178,10 @@ int Connection::handle_request() {
         if (fill_rc == -1) {
             return -1; // Error with the read
         }
-        // Fetch requests from the buffer            
+        // Fetch requests from the buffer
+        int offset = 0;     
         while (true) {
-            int process_rc = process_next_request();
+            int process_rc = process_next_request(&offset);
             if (process_rc == -1) {
                 return -1;                    
             } else if (process_rc == 0) {

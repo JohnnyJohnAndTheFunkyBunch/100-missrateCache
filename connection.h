@@ -34,8 +34,8 @@ class Connection {
     std::list<std::string> out_bufs_;
     
     int fill_buffer();    
-    int process_next_request();    
-    int fetch_request(struct Request* req);    
+    int process_next_request(int* offset);    
+    int fetch_request(struct Request* req, int offset, int* amount_read);    
     void copy_to_write_buf(int offset, char* src, int src_len);    
     int sendToNessieFake(int magic, int opcode, int keylength, int totalbody, 
                          int extralength, char* opaque, char* buffer);

@@ -4,9 +4,9 @@
 #include <map>
 #include <unistd.h>
 #include <vector>
-#include "connection_io_server.h"
-#include "lock_token.h"
-#include "connection.h"
+#include <memcached-imitation/connection_io_server.h>
+#include <memcached-imitation/lock_token.h>
+#include <memcached-imitation/connection.h>
 
 namespace NessieCache {
     

@@ -4,6 +4,9 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/ioctl.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/tcp.h>
 
 namespace NessieCache {
 
@@ -23,6 +26,15 @@ class SocketUtil {
         flags = 1;
         return ioctl(fd, FIOBIO, &flags);
 #endif
+    }
+    static void turn_off_nagle(int fd) {
+        int flag = 1;
+        int result = setsockopt(fd,            /* socket affected */
+                                IPPROTO_TCP,     /* set option at TCP level */
+                                TCP_NODELAY,     /* name of option */
+                                (char *) &flag,  /* the cast is historical cruft */
+                                sizeof(int));
+        
     }
 };
 }
